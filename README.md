@@ -1,4 +1,4 @@
-# Tether Production Bible
+# Storyboard Creator
 
 A cinematic storyboard generator and production bible tool for the *Tether* series.
 
@@ -11,7 +11,7 @@ A cinematic storyboard generator and production bible tool for the *Tether* seri
 
 ## Preview
 
-![Tether Production Bible Screenshot](./Screenshot%202026-03-18%20at%2016-01-24%20Tether%20Production%20Bible%20Google%20AI%20Studio.png)
+![Screenshot](./Screenshot1.png)
 
 ## License
 

@@ -1,5 +1,5 @@
 {
-  "name": "Tether Production Bible",
+  "name": "Storyboard Creator",
   "description": "A multimodal production engine for cinematic storyboarding and director's intent generation using Gemini.",
   "requestFramePermissions": []
 }

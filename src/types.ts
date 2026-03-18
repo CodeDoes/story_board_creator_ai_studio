@@ -7,7 +7,7 @@ export interface PageData {
   loc: { title: string; prompt: string };
   chars: string[];
   props?: string[];
-  frames: StoryFrame[]; // The complete 16-frame temporal sequence
+  frames: StoryFrame[]; // The complete temporal sequence (8-32 frames)
 }
 
 declare global {
