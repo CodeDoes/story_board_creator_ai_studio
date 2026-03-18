@@ -1,6 +1,6 @@
 /**
  * @license
- * SPDX-License-Identifier: Apache-2.0
+ * SPDX-License-Identifier: MIT
  */
 
 import React, { useState, useEffect } from 'react';
@@ -86,14 +86,16 @@ NEW SCRIPT CONTENT:
 {{RAW_SCRIPT}}
 
 INSTRUCTIONS:
-1. Compare the new script with the existing data.
-2. Decide what to ADD, REMOVE, or REPLACE.
-3. Maintain visual consistency for existing characters, locations, and key props.
-4. Generate detailed visual prompts for new elements.
-5. Provide a summary for each sequence (new or updated).
+1. Break down the ENTIRE script into logical story beats (storyboard items).
+2. Each story beat should represent a specific location and sequence of action.
+3. For EACH story beat, you MUST generate EXACTLY 16 distinct frames that cover the action in that beat.
+4. Maintain visual continuity for existing characters, locations, and key props.
+5. Generate detailed visual prompts for new elements.
+6. Provide a summary for each sequence (new or updated).
+7. If the script is long, ensure you process ALL of it, creating multiple storyboard items as needed. Do not stop after the first scene.
 
 Return a COMPLETE NEW JSON object with:
-1. "masterChars": Record<string, { name: string, prompt: string }>
+1. "masterChars": Record<string, { name: string, prompt: string }> - All characters in the production.
 2. "masterProps": Record<string, { name: string, prompt: string }> - Key objects, ships, or items that need visual consistency.
 3. "sequenceSummaries": Record<string, string> - A brief overview of what each sequence is about.
 4. "storyboard": Array<{
@@ -102,47 +104,910 @@ Return a COMPLETE NEW JSON object with:
      sequence: string,
      priority: "high" | "low",
      loc: { title: string, prompt: string },
-     chars: string[],
-     props: string[], // IDs of master props present in this beat
-     frames: Array<{ id: number, prompt: string, priority: "highlight" | "standard" }> // Exactly 16 frames. 4 must be "highlight".
-   }> - Every story beat. High priority for key narrative shifts, low for transitions.
+     chars: string[], // IDs from masterChars
+     props: string[], // IDs from masterProps
+     frames: Array<{ id: number, prompt: string, priority: "highlight" | "standard" }> // Exactly 16 frames per beat. Exactly 4 must be "highlight".
+   }>
 
-Ensure prompts are highly descriptive for cinematic generation.`;
+CRITICAL: Ensure prompts are highly descriptive for cinematic generation. Use the provided style templates if applicable. The output MUST be valid JSON.`;
 
 export default function App() {
   const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
   const [storyboard, setStoryboard] = useState<PageData[]>(DEFAULT_STORYBOARD);
+  const [storyboardAspectRatio, setStoryboardAspectRatio] = useState<"1:1" | "3:4" | "4:3" | "9:16" | "16:9">("16:9");
   const [sequenceSummaries, setSequenceSummaries] = useState<Record<string, string>>({
     "Sequence 1": "Kael Vasaro wakes up in his cramped quarters on The Liminal, preparing for another day of survival in deep space."
   });
-  const [rawScript, setRawScript] = useState("");
+  const [rawScript, setRawScript] = useState(`Title: TETHER
+Credit: Episode 1
+Author: Created for Tether Productions
+Draft date: January 2026
+
+====
+
+FADE IN:
+
+INT. THE LIMINAL - CREW QUARTERS - DEEP SPACE
+
+DARKNESS. Then--
+
+The soft PING of a ship's system waking up. Status lights blink to life in sequence, casting blue-green shadows across a cramped bunk.
+
+KAEL VASARO (mid-40s) lies on his back, eyes closed. His face is weathered but not hard--more tired than bitter. Graying hair, disheveled, poorly cut. The kind of man who stopped caring about appearances around the same time he stopped caring about most things.
+
+He doesn't move. The ship HUM surrounds him like a blanket.
+
+LIMINAL (V.O.)
+(ship AI, female, flat)
+Transit complete. Kepler Station approach confirmed. Docking window in forty-three minutes.
+
+Another PING. More insistent.
+
+Kael's eyes open. He stares at the ceiling--metal panels covered in twenty years of modifications. Cable runs. Personal touches. A photograph tucked into a joint seam, too faded to read from here.
+
+He exhales. Not a sigh--just breathing. The first breath of another day that doesn't require anything from him.
+
+A grunt. He sits up slowly. Every joint in his body protests. He ignores it.
+
+The quarters are TIGHT. A bunk barely wide enough for his shoulders. Storage compartments built into every surface. A fold-down desk with a console. Everything within arm's reach.
+
+Twenty years on this ship. Twenty years of wear patterns. Twenty years of making this space HIS.
+
+Kael swings his legs off the bunk. His bare feet touch the deck plating--cold metal, familiar. The HUM rises through his soles.
+
+He reaches for a COFFEE MAKER mounted to the wall. It's been repaired so many times the original parts are probably outnumbered. He hits a button. It GURGLES and HISSES, then produces something approximately like coffee.
+
+He drinks it standing, staring at nothing.
+
+The coffee maker falls silent. The HUM remains--always the HUM.
+
+LIMINAL (V.O.)
+Atmospheric recycling at optimal--
+
+KAEL
+Mute.
+
+Silent again but for the HUM.
+
+INT. THE LIMINAL - COCKPIT - CONTINUOUS
+
+Kael moves forward through the narrow corridor. The cockpit is small but functional--pilot's chair, nav console, wide viewport.
+
+Through the glass: STARS. Endless. And in the distance, growing larger, the rotating ring of KEPLER STATION. Gray metal against black void. Running lights blinking. Ships dotting the approaches like fireflies.
+
+Kael settles into the pilot's chair. It's molded to his body after two decades.
+
+LIMINAL (V.O.)
+Docking beacon acquired. Lane assignment: Berth 17-C.
+
+KAEL
+(flat)
+Accepted.
+
+His voice is rough from disuse.
+
+The station grows in the viewport. A pit stop. Fuel, supplies, and gone.
+
+EXT. KEPLER STATION - DOCKING ARM - LATER
+
+The Liminal slides into her berth. DOCKING CLAMPS engage with a solid THUNK. Umbilicals extend and connect--power, data, atmo.
+
+The ship settles and goes quiet.
+
+INT. THE LIMINAL - AIRLOCK - CONTINUOUS
+
+Kael stands at the inner door, waiting for pressure equalization. He's dressed now--practical spacer clothes. Worn jacket, navy blue pants, boots that have seen a thousand station decks. A SIDEARM on his hip, holstered but visible. Normal out here.
+
+He reaches toward a small port near the inner door, unplugs something, and slips it onto his wrist--an unremarkable metal bracelet.
+
+The airlock cycles and the outer door opens.
+
+INT. KEPLER STATION - DOCK CORRIDOR - CONTINUOUS
+
+Kael steps out into the station.
+
+The difference is immediate. A draft of recycled air. Distant mechanical noise. The sterile hum of a place built for function, not comfort.
+
+The dock corridor stretches ahead--wide, clinical, busy in its own way:
+
+-- CARGO BOTS roll past, their chassis scratched and dented. Some move in formation. Others navigate solo, weaving around obstacles.
+
+-- SHIPS of various sizes fill the visible berths. A battered freighter getting its hull patched. A sleek courier vessel with engine panels open. A salvage rig that looks like it was assembled from three different ships.
+
+-- PEOPLE. Dock workers in coveralls. Pilots in flight suits. Merchants. Mechanics. Drifters. Everyone has somewhere to be.
+
+-- MORE BOTS THAN PEOPLE. Service units polishing viewport glass. Maintenance drones crawling along cable runs overhead. Delivery bots weaving between legs. The human-to-machine ratio tilted heavily toward machine.
+
+Kael walks. Not fast, not slow. He weaves wide around other people, giving them too much space. His face says he'd rather be anywhere else.
+
+A CLEANING BOT crosses his path, scrubbing a fuel stain from the deck. He steps around it without slowing.
+
+MARKET STALLS line the corridor walls. Synthetic protein in various shapes. Hydroponic vegetables. Stimulants. Questionable electronics. A man selling "genuine Earth artifacts" that are obviously printed fakes.
+
+The AIR smells like recycled atmo, machine oil, and something cooking with too much spice. The station's ventilation hums overhead, a constant bass note beneath the chaos.
+
+Kael passes a NEWS DISPLAY mounted to a pillar. A talking head mouths silently--some political story. He doesn't look.
+
+EXT. KEPLER STATION - REPAIR BAY 12 - CONTINUOUS
+
+A workshop space open to the dock corridor. Tools hanging on pegboards. Ship components on workbenches. The organized chaos of people who know where everything is.
+
+TOMAS (50s, barrel-chested, practical) is elbow-deep in an engine housing. His husband YUKI (50s, lean, patient face, graying temples) works at a diagnostic console nearby.
+
+Kael approaches. Tomas looks up. His face splits into a grin.
+
+TOMAS
+Vasaro. You look like shit.
+
+KAEL
+Long haul.
+
+Tomas wipes his hands on a rag.
+
+TOMAS
+Where from?
+
+KAEL
+Belt. The far side.
+
+YUKI
+(without looking up)
+The Liminal holding up?
+
+KAEL
+Always does.
+
+TOMAS
+Got a coupling that'd fit your starboard thruster.
+
+Kael raises an eyebrow slightly. Waiting.
+
+TOMAS (CONT'D)
+Fell off a transport. Legally.
+
+KAEL
+How much?
+
+TOMAS
+For you? Cost plus ten.
+
+KAEL
+I'll think about it.
+
+YUKI
+(still not looking up)
+You always think about it. Then you buy it.
+
+The corner of Kael's mouth twitches.
+
+TOMAS
+You eating?
+
+KAEL
+Getting to it.
+
+TOMAS
+Ming's is good today. The noodles.
+
+Kael nods and moves on.
+
+EXT. KEPLER STATION - FOOD STALL CORRIDOR - CONTINUOUS
+
+A narrow passage lined with cooking stations. Steam and smoke. The SIZZLE of protein on hot metal. VENDORS calling out in multiple languages.
+
+Kael stops at a stall run by an OLD WOMAN with cybernetic eyes. Her movements are precise despite her age. She's cooking something unidentifiable--meat, probably. It smells good enough.
+
+OLD WOMAN
+The usual?
+
+Kael nods.
+
+She works fast. Skewered protein, some kind of sauce, wrapped in synthetic bread. She hands it to him. He pays with a tap of his wrist.
+
+OLD WOMAN (CONT'D)
+You're back soon.
+
+KAEL
+Needed supplies.
+
+OLD WOMAN
+Don't we all.
+
+He takes his food. Eats it walking. The protein is chewy, overseasoned, exactly what he expected. It's fine. Fine is enough.
+
+EXT. KEPLER STATION - OBSERVATION DECK - CONTINUOUS
+
+A small platform with a viewport looking out at the station's exterior. Ships coming and going. The distant glow of the belt.
+
+Kael stands here, finishing his food. Watching.
+
+TWO WORKERS pass behind him. Young but tired. Together, but you can't tell if they're a couple or just two people on a job.
+
+Kael watches them go.
+
+A SECURITY BOT rolls past, scanning faces. Its red eye lingers on Kael for a moment, then moves on.
+
+He finishes eating. Balls up the wrapper. Drops it in a recycler.
+
+Heads back to his ship.
+
+INT. THE LIMINAL - COCKPIT - LATER
+
+Kael settles back into his chair.
+
+He pulls up the JOB BOARD on his console. Listings scroll past:
+
+-- "Cargo run to Titan Station - 4 weeks - Standard rate"
+-- "Salvage claim dispute escort - Combat certification required"
+-- "Medical supplies to Belt Colony 7 - Priority transit"
+-- "Data courier - Origin: Earth - Destination: Classified"
+
+He scrolls. Stops on one.
+
+LISTING (ON SCREEN)
+"Mineral samples - Kepler to Ceres Outpost. 3 weeks transit. Rate: 12,000 credits. No questions."
+
+Good enough. He accepts it. The confirmation pings.
+
+LIMINAL (V.O.)
+Route calculation initiated. Estimated transit time: 19 days, 4 hours.
+
+KAEL
+Start it.
+
+While the nav computer works, he pulls up a secondary display. Tabs through options. Lands on: NEWS FEED.
+
+He doesn't know why he does it.
+
+INT. THE LIMINAL - COCKPIT - CONTINUOUS
+
+The feed fills his screen. Talking heads. Graphics. The endless churn.
+
+HEADLINE CRAWLER: "LOCKE CAMPAIGN IN FREEFALL AFTER FUNDING REVELATIONS"
+
+Kael's eyes flick to the story. A VIDEO plays:
+
+VANESSA LOCKE (50s, composed, professional) stands at a podium. She looks tired.
+
+NEWS ANCHOR (V.O.)
+(from the feed)
+Independent candidate Vanessa Locke suspended her campaign today amid escalating allegations of financial impropriety--
+
+Kael taps to another channel. Different talking head. Different angle.
+
+NEWS ANCHOR 2 (V.O.)
+--the progressive coalition has called for a full investigation into what they're calling "a shocking betrayal of stated values"--
+
+Another tap. Another channel.
+
+NEWS ANCHOR 3 (V.O.)
+--conservative groups are demanding accountability, citing Locke's alleged ties to globalist banking interests--
+
+His fingers stop on the screen. He taps through more feeds:
+
+CHANNEL 7: "LOCKE EXPOSED: Dark money ties reveal centrist fraud"
+
+NEWSNET: "LOCKE UNMASKED: Progressive policies funded by offshore elites"
+
+Same footage. Same woman.
+
+KAEL
+(barely audible)
+Yeah.
+
+He closes the political feeds. Scrolls past them. Station updates. Shipping manifests. Celebrity gossip. An ad for memory enhancement implants.
+
+The usual churn.
+
+Then--
+
+He stops scrolling.
+
+HEADLINE (ON SCREEN)
+"Federal Auditor Dies in New Francisco Apartment Fire. Twin Sister Survived."
+
+Kael stares at it.
+
+His finger hovers over the screen.
+
+CLOSE ON his eyes.
+
+He taps the story.
+
+INT. THE LIMINAL - COCKPIT - CONTINUOUS
+
+The article expands:
+
+TEXT (ON SCREEN)
+"...Federal Accounts Division employee found deceased following residential fire in the Tenderloin district of New Francisco. The cause of the blaze remains under investigation. The victim's twin sister, who was present at the time, escaped with minor injuries and is cooperating with authorities..."
+
+New Francisco. Twin sister.
+
+Kael's face is very still.
+
+KAEL
+(quiet)
+No.
+
+(to the ship)
+Marcus Oyelaran. Pull up his profile.
+
+The screen populates. MARCUS OYELARAN. Thoughtful eyes. The kind of face that doesn't give much away. Current position: "Senior Auditor, Federal Accounts Division, Western Region."
+
+Kael stares at the photo.
+
+KAEL
+(quiet)
+Shit, Marcus.
+
+FLASHBACK - QUICK CUTS:
+
+-- TEXT on a screen: "You awake?" "Yeah. Can't sleep." "Same. What time is it there?" "Late."
+
+-- A voice message, MARCUS's voice: "Called about the thing. They're stonewalling. Surprise surprise."
+
+-- Another text exchange: "You ever think about just... leaving?" "And do what? Federal auditing doesn't exactly transfer to the belt colonies. All I know is spreadsheets and fraud patterns."
+
+-- A later message, Marcus again: "Besides. Dad's latest scheme fell apart. Again. Someone's gotta help Mom keep the lights on. Not all of us are as free as you."
+
+BACK TO PRESENT:
+
+Kael's hand is trembling slightly. He steadies it.
+
+LIMINAL (V.O.)
+Route calculation complete. Ready to depart.
+
+Kael doesn't move.
+
+He reads the article again. "Apartment fire." "Cause under investigation." "Twin sister survived."
+
+His hand hovers over the screen, not quite steady.
+
+LIMINAL (V.O.)
+Awaiting departure confirmation.
+
+Kael reaches for the console. His finger hovers over the "Confirm" button.
+
+He doesn't press it.
+
+Instead, he opens the nav system. Cancels the job.
+
+LIMINAL (V.O.)
+Job canceled. Penalty fee applied to account.
+
+Kael ignores it. He's already typing a new destination.
+
+NEW DESTINATION (ON SCREEN): EARTH - NEW FRANCISCO APPROACH - PRIORITY TRANSIT
+
+LIMINAL (V.O.)
+Warning: Earth transit requires current documentation and landing permits. Your credentials have not been updated in--
+
+KAEL
+Override.
+
+LIMINAL (V.O.)
+Calculating priority route. Estimated transit: 11 days.
+
+KAEL
+Do it.
+
+He hits the release sequence. The docking clamps DISENGAGE.
+
+EXT. KEPLER STATION - DOCKING ARM - CONTINUOUS
+
+The Liminal pulls away from the berth. Umbilicals disconnect and retract. The ship pivots, nose orienting toward the void.
+
+INT. THE LIMINAL - COCKPIT - CONTINUOUS
+
+Kael watches the station shrink in the viewport. His hands rest on the controls, not moving.
+
+KAEL
+(quiet)
+What did you find, Marcus?
+
+EXT. SPACE - CONTINUOUS
+
+The Liminal accelerates. Her engines flare bright, then brighter.
+
+Kepler Station dwindles behind her. The ship becomes a point of light, streaking toward the distant inner system.
+
+Toward Earth.
+
+Toward a place Kael stopped thinking about a long time ago.
+
+TITLE CARD:
+
+T E T H E R
+
+The title BURNS IN, then FADES slowly as the ship's light disappears into the black.
+
+FADE TO:
+
+INT. THE LIMINAL - CREW QUARTERS - LATER
+
+Kael asleep in his bunk. Dead to the world.
+
+A PING from the ship's system. He doesn't move.
+
+Another PING. His hand reaches out, slaps the console. Silence.
+
+He settles back into sleep.
+
+The coffee maker GURGLES to life on its timer. HISSES. SPUTTERS. The smell of something approximately like coffee fills the quarters.
+
+Kael's eyes open. He stares at the ceiling. Exhales.
+
+Drags himself up.
+
+INT. THE LIMINAL - COCKPIT - LATER
+
+Kael in the pilot's chair, coffee in hand. Through the viewport: Earth, filling the view.
+
+LIMINAL (V.O.)
+Approaching Earth orbital space. Traffic control handoff initiated.
+
+Kael straightens in his chair.
+
+LIMINAL (V.O.)
+Be advised: Documentation check required at orbital checkpoint.
+
+KAEL
+What's our status?
+
+LIMINAL (V.O.)
+Your credentials show last planetary landing: twenty years, three months, seven days ago. System flagged for manual review.
+
+KAEL
+And?
+
+LIMINAL (V.O.)
+Review completed. Landing permit approved. Note attached: "Welcome back."
+
+Kael says nothing. Welcome back. The two least appropriate words in any language.
+
+EXT. EARTH ORBIT - CONTINUOUS
+
+The Liminal slides into a berth at a massive ORBITAL STATION. Docking clamps engage. The ship is SCANNED by multiple sensor arrays. Transponder exchanges happen automatically.
+
+Through the viewport: Earth. Kael doesn't linger on it.
+
+INT. ORBITAL STATION - SHUTTLE TERMINAL - LATER
+
+Kael moves through the crowded terminal. Travelers everywhere--business suits, family groups, laborers heading down for contract work. He finds his gate and boards a surface shuttle with forty other passengers.
+
+INT. SURFACE SHUTTLE - CONTINUOUS
+
+Kael sits by a window, head against the glass. The shuttle detaches, angles toward atmosphere. His eyes are half-closed, bleary. He could be asleep.
+
+EXT. NEW FRANCISCO - LOWER DISTRICT - TRANSIT STATION - DUSK
+
+Underground platform. Kael emerges from a TRANSIT CAR with a crowd of commuters. He moves through the turnstiles, up the stairs, onto the street.
+
+The Lower District. Old buildings, dense blocks, infrastructure that was state-of-the-art two decades ago.
+
+He checks his sidearm. Takes a breath. Starts walking.
+
+EXT. NEW FRANCISCO - LOWER DISTRICT - STREET - CONTINUOUS
+
+Kael steps into the flow of foot traffic.
+
+The ASSAULT is immediate.
+
+SOUND: Traffic. Voices. Music bleeding from storefronts. Advertisements. Sirens in the distance. The hum of a thousand machines. The never-ending PULSE of a city that never stops.
+
+SMELL: Exhaust. Synthetic food. Rain on hot pavement. A chemical sweetness that might be perfume or might be pollution.
+
+SIGHT: People EVERYWHERE. Packed onto sidewalks. Spilling out of buildings. Moving in streams and eddies around obstacles. All of them looking at screens. All of them somewhere else.
+
+Kael stands very still.
+
+A PEDESTRIAN bumps into him, doesn't apologize, keeps walking, eyes never leaving their wrist display.
+
+Another pedestrian. Another. Everyone walking blind, trusting their peripheral vision.
+
+Kael starts walking. His body language is WRONG here. Too much space around his movements. Too much awareness of his surroundings. He looks like what he is--an outsider.
+
+A BEGGAR reaches toward him from a doorway. Kael sidesteps without acknowledgment. The beggar doesn't seem to notice.
+
+The NOISE is worse than he remembered. Speakers on every corner. Music bleeding from storefronts. A hundred conversations layered on top of each other.
+
+From a storefront speaker, a PODCAST bleeds into the street:
+
+PODCAST HOST (V.O.)
+--and that's exactly what they want you to think. The moderates are the real extremists, because they enable--
+
+From another direction, an AD plays on loop:
+
+ADVERTISEMENT (V.O.)
+They said I could trust them! Don't make my mistake. TrustVer--because in a world of deep fakes, you deserve to know what's real.
+
+Kael reaches into his jacket. Pulls out a pair of NOISE-CANCELLING HEADPHONES. Old model, well-worn. He puts them on.
+
+The world goes QUIET.
+
+BROWN NOISE fills his ears--the steady, familiar hum. Like The Liminal's systems. Like home.
+
+He walks faster. The chaos continues around him, but he's insulated now. Safe in his bubble.
+
+He passes a STREET PREACHER on a corner, mouth moving silently--Kael can't hear a word. The preacher gestures wildly at nothing. Nobody's listening. Bots clean around his feet without slowing.
+
+Kael turns down a side street. Narrower. Darker. The buildings press closer. Fire escapes zigzag overhead. LAUNDRY hangs from windows. The first signs of actual human habitation.
+
+He checks his wrist unit. A MAP displays. Destination highlighted.
+
+KAEL
+(quiet)
+Three more blocks.
+
+He keeps moving.
+
+EXT. NEW FRANCISCO - TENDERLOIN DISTRICT - MARCUS'S BUILDING - NIGHT
+
+The address.
+
+A residential tower, maybe fifteen stories. Old but maintained. The kind of place working people live--too poor to leave, too stable to fall further.
+
+Kael stands across the street, looking up.
+
+THIRD FLOOR. The window of Marcus's unit is BLACKENED. Scorch marks spread up the exterior like fingers reaching toward the sky. A section of wall is MISSING--exposed framework, charred insulation.
+
+The surrounding windows are intact. Other units undamaged.
+
+Yellow caution tape hangs from the building entrance. One strip has been cut.
+
+Kael removes his headphones and lets them hang around his neck. The street sounds rush in.
+
+Kael checks his surroundings. The street is sparse--a few pedestrians, none paying attention. A FOOD VENDOR packing up for the night. A DRONE passing overhead, sweeping the area with a spotlight before moving on.
+
+He crosses the street.
+
+INT. MARCUS'S BUILDING - LOBBY - CONTINUOUS
+
+The lobby is small and worn. A SECURITY DESK sits empty--the screen showing a maintenance notice. "Guard station unstaffed during off-hours. All visitors must register via mobile app."
+
+Kael doesn't register. He walks past, toward the elevators.
+
+One elevator is OUT OF SERVICE--taped off. The other is working. He takes it.
+
+INT. MARCUS'S BUILDING - ELEVATOR - CONTINUOUS
+
+Kael stands alone as the car rises, watching his reflection in the polished metal door.
+
+The elevator PINGS. Third floor.
+
+INT. MARCUS'S BUILDING - THIRD FLOOR HALLWAY - CONTINUOUS
+
+The doors open. The SMELL hits first.
+
+Burnt plastic. Charred wood. The lingering chemical bite of fire suppressant. Under it all, something organic. Something wrong.
+
+Kael steps out.
+
+The hallway is dimly lit--half the fixtures dead, casualties of the fire. SOOT stains the walls near Marcus's unit. The carpet is discolored, water-damaged.
+
+Marcus's door is at the end.
+
+It's OPEN. The frame warped, the lock mechanism melted into uselessness. More caution tape--cut, hanging loose.
+
+Kael draws his sidearm and moves quietly to the doorway. Listens.
+
+VOICES inside. Low, annoyed.
+
+VOICE 1 (O.S.)
+(muffled through a face mask)
+Negative on the desk. Already cleared.
+
+VOICE 2 (O.S.)
+Check the vents. These places always have dead space.
+
+Kael edges closer. Looks through the gap.
+
+INT. MARCUS'S APARTMENT - CONTINUOUS
+
+The apartment is DESTROYED. Fire damage everywhere--walls black, furniture melted or collapsed, ceiling panels hanging loose. Water damage has made the floor treacherous.
+
+TWO FIGURES pick through the wreckage. Police gear, no badges. One yanks at a vent cover, impatient. The other paws through a collapsed bookshelf, helmet light bobbing, barely seeing what his hands are touching.
+
+A duffel bag on the floor, half-full of random salvage.
+
+Kael's eyes scan the room. The layout is visible despite the damage--living area, kitchenette, doorway to what must have been a bedroom. Personal effects reduced to ash and fragments.
+
+Then he sees it.
+
+On a WARPED SHELF near where a bathroom once was--half-melted, discolored, but intact--a small PLASTIC CASE. Rectangular. Hinged.
+
+A contact lens holder.
+
+FLASHBACK - QUICK:
+
+KAEL (V.O.)
+(from an old message, teasing)
+Got you something. Contacts would suit you better. Make you look less like someone's grandfather.
+
+MARCUS'S VOICE (V.O.)
+(dry)
+It's a contact lens case.
+
+KAEL (V.O.)
+Was 2-for-1, so I got one for you. No offense, but I have no one else to give it to.
+
+MARCUS'S VOICE (V.O.)
+(laughing)
+Asshole.
+
+BACK TO PRESENT:
+
+Kael's grip tightens on his sidearm.
+
+One of the figures turns, catches movement in the doorway.
+
+FIGURE 1
+Hey--
+
+He fumbles for his weapon.
+
+Kael MOVES.
+
+INT. MARCUS'S APARTMENT - CONTINUOUS
+
+GUNFIRE. Wild. Figure 1's first shots go wide, punching holes in the ceiling.
+
+Kael dives behind the remains of a collapsed couch.
+
+Figure 2 opens fire--spraying rounds without aiming. The couch shreds. Kael stays low.
+
+He returns fire. Two shots. Figure 2 staggers, clutching his arm.
+
+FIGURE 2
+Shit! SHIT!
+
+Kael vaults the couch, sprinting toward the shelf. His hand reaches for the case--
+
+A shot splinters the shelf inches from his fingers. He ducks back behind a scorched cabinet.
+
+Waits. Breathing.
+
+He grabs a chunk of debris, hurls it across the room. It clatters against the far wall.
+
+Both figures turn toward the sound.
+
+Kael moves--one fluid motion. Grabs the case, pockets it, keeps running.
+
+FIGURE 1
+He grabbed something!
+
+Kael spins. The bathroom--what's left of it--has a VENT ACCESS near the ceiling. He's already moving.
+
+He LEAPS, catches the edge of the vent, PULLS himself up as gunfire SHREDS the wall below him.
+
+INT. MARCUS'S BUILDING - VENTILATION SHAFT - CONTINUOUS
+
+Kael crawls. Fast. The space is tight--barely wide enough for his shoulders. The metal groans under his weight.
+
+Behind him, shouting. Confusion.
+
+FIGURE 1 (O.S.)
+(muffled)
+Where'd he go?
+
+Kael reaches a junction. Chooses left. Crawls faster.
+
+The shaft ENDS at another vent cover. He can see through the slats--a HALLWAY. Different floor. Maybe second.
+
+He KICKS the cover out. Drops through.
+
+INT. MARCUS'S BUILDING - SECOND FLOOR HALLWAY - CONTINUOUS
+
+Kael lands hard, rolls, comes up running.
+
+The hallway is residential--doors on both sides. A few are OPEN, residents peering out at the noise. An OLD MAN in a bathrobe. A YOUNG WOMAN with a child on her hip.
+
+KAEL
+(as he runs)
+Get inside. Lock your doors.
+
+They stare. He's gone before they can respond.
+
+STAIRWELL. He hits the door, takes the stairs up.
+
+INT. MARCUS'S BUILDING - STAIRWELL - CONTINUOUS
+
+Kael climbs. His legs burn but they don't fail him.
+
+BELOW: boots on metal. Shouting.
+
+FIGURE 2 (O.S.)
+He's going up!
+
+FIGURE 1 (O.S.)
+Go, go!
+
+Kael reaches the FOURTH FLOOR door. Opens it. Closes it loudly.
+
+But doesn't go through. He waits.
+
+FOOTSTEPS pound past, going up.
+
+He slips back into the stairwell. Goes DOWN.
+
+INT. MARCUS'S BUILDING - FIRST FLOOR - CONTINUOUS
+
+Kael emerges into a service corridor. Basement access, utility rooms, a back exit.
+
+He takes the EXIT.
+
+EXT. MARCUS'S BUILDING - ALLEY - CONTINUOUS
+
+The alley is narrow, dark, lined with refuse processors and recycling units. The smell is overwhelming.
+
+Kael moves fast but not running. Walks with purpose, keeping to shadows.
+
+He reaches the street. Turns right. Away from the building.
+
+SIRENS begin in the distance. Getting closer.
+
+He walks faster.
+
+EXT. NEW FRANCISCO - TENDERLOIN DISTRICT - SIDE STREETS - CONTINUOUS
+
+Kael navigates the maze of side streets. Taking turns at random. Putting distance between himself and the scene.
+
+The streets are emptier here--late night, residential, working-class neighborhood asleep or pretending to be. The occasional drone passes overhead. He avoids their lights.
+
+He stops. Listens. Nothing. No boots. No pursuit.
+
+He exhales. Pulls his HEADPHONES back on. The HUM returns. His shoulders drop slightly.
+
+KAEL
+(quiet)
+Marcus, what did you get yourself into?
+
+He keeps moving. Faster now.
+
+A CORNER. He turns it, looking back over his shoulder--
+
+He doesn't hear her footsteps. The headphones. The brown noise.
+
+COLLISION.
+
+His shoulder CONNECTS with someone's face. Hard.
+
+A WOMAN. She goes DOWN, hitting the pavement. Doesn't get up.
+
+Kael stumbles, catches himself.
+
+He takes three steps.
+
+Stops.
+
+Looks back.
+
+She's on the ground. Not moving. The streetlight here is flickering, half-dead.
+
+Kael pulls off his headphones. The world comes rushing back--sirens, still distant. No immediate pursuit.
+
+He goes back.
+
+She's BREATHING. Just knocked out. Her face is turned away, hair covering her features.
+
+He grabs her under the arms. DRAGS her toward a doorway--an alcove, recessed, dark.
+
+KAEL
+(muttering)
+Come on...
+
+He props her against the wall. She slumps but stays sitting. Still unconscious.
+
+His hands check her for injuries. No blood. No obvious breaks. Just knocked cold.
+
+He pulls out his phone. Activates the light.
+
+And FREEZES.
+
+CLOSE ON: ELARA OYELARAN'S FACE
+
+The same face as Marcus. Feminine. Softer. But the bone structure is identical. The eyes--closed now--are the same shape, the same set.
+
+FLASHBACK - QUICK:
+
+NEWS HEADLINE (V.O.)
+"...Twin sister survived..."
+
+BACK TO PRESENT:
+
+KAEL
+(barely a whisper)
+Elara.
+
+SIRENS. Closer now. Much closer.
+
+Kael looks up. Through the alcove opening, he can see the street beginning to FILL.
+
+Vehicles roll past--unmarked SUVs, a van with a faded agency logo. Men climb out in mismatched gear, some in vests, some not. Holstered pistols, a few shotguns. They spread out like they're following a script none of them memorized.
+
+EXT. NEW FRANCISCO - TENDERLOIN DISTRICT - STREET - CONTINUOUS
+
+The crackdown begins.
+
+The men fan out, pounding on doors, shouting. Residents dragged into the street.
+
+An OLD MAN protests. He's STRUCK with a baton, forced to his knees.
+
+A FAMILY emerges, hands raised. CHILDREN CRYING. They're pushed against a wall and questioned.
+
+DRONES flood the airspace, spotlights sweeping the streets.
+
+Shouts. Screams. The sounds of a neighborhood being torn apart.
+
+INT. ALCOVE - CONTINUOUS
+
+Kael watches through a gap in the doorway.
+
+ELARA stirs.
+
+Kael turns. She's coming to. Her eyes flutter, trying to focus. Her hand goes to her head--pain.
+
+ELARA
+(groggy)
+Wh... what...
+
+Her eyes find Kael. A stranger crouched over her in the dark.
+
+She starts to panic.
+
+Outside: SIRENS. BOOTS. SCREAMING. The crackdown tearing the neighborhood apart.
+
+She opens her mouth to scream--
+
+SMASH CUT TO BLACK.
+
+SILENCE.
+
+Hold on black for a long beat.
+
+Then -- distant, muffled -- the sounds of the crackdown continuing. Sirens. Shouts. A child crying somewhere.
+
+The sounds fade.
+
+TITLE CARD:
+
+T E T H E R
+
+The title holds. Then fades.
+
+BLACK.
+
+FADE OUT.
+
+
+END OF EPISODE 1`);
   const [isProcessingScript, setIsProcessingScript] = useState(false);
   const [scriptStartTime, setScriptStartTime] = useState<number | null>(null);
   const [activePanel, setActivePanel] = useState<"references" | "sequences" | "data" | "settings">("sequences");
   const [masterChars, setMasterChars] = useState<Record<string, Character>>({
-    kael: { 
-      name: "Kael Vasaro", 
-      prompt: "A weathered man in his 50s, grey stubble, deep-set weary eyes, wearing a patched flight suit with faded insignias. Cybernetic data port visible behind his left ear." 
+    "kael": {
+      "name": "Kael Vasaro",
+      "prompt": "A weathered man in his 50s, grey stubble, deep-set weary eyes, wearing a patched flight suit with faded insignias. Cybernetic data port visible behind his left ear."
     },
-    tomas: {
-      name: "Tomas",
-      prompt: "A burly station mechanic in greasy coveralls, with a thick beard and a suspicious expression."
+    "tomas": {
+      "name": "Tomas",
+      "prompt": "A burly station mechanic in greasy coveralls, with a thick beard and a suspicious expression."
     },
-    yuki: {
-      name: "Yuki",
-      prompt: "A lean, sharp-eyed mechanic with short-cropped black hair and a tool belt slung low on her hips."
+    "yuki": {
+      "name": "Yuki",
+      "prompt": "A lean, sharp-eyed mechanic with short-cropped black hair and a tool belt slung low on her hips."
     },
-    marcus: {
-      name: "Marcus",
-      prompt: "A shadowy figure in a hooded cloak, his face partially obscured by shadows."
+    "marcus": {
+      "name": "Marcus",
+      "prompt": "A shadowy figure in a hooded cloak, his face partially obscured by shadows."
     },
-    fake_cops: {
-      name: "Security Guards",
-      prompt: "Figures in black security uniforms with polarized visors that obscure their faces."
+    "fake_cops": {
+      "name": "Security Guards",
+      "prompt": "Figures in black security uniforms with polarized visors that obscure their faces."
     },
-    elara: {
-      name: "Elara (AI)",
-      prompt: "A shimmering blue AI avatar with ethereal features and glowing eyes."
+    "elara": {
+      "name": "Elara (AI)",
+      "prompt": "A shimmering blue AI avatar with ethereal features and glowing eyes."
     }
   });
   const [masterProps, setMasterProps] = useState<Record<string, Prop>>({
@@ -164,6 +1029,7 @@ export default function App() {
     }
   });
   const [sharedProps, setSharedProps] = useState<Record<string, { result: GenerationResult | null; loading: boolean; startTime?: number }>>({});
+  const [activeTabs, setActiveTabs] = useState<Record<number, GenerationMode>>({});
   const [scriptText, setScriptText] = useState("");
   const [streamingScriptText, setStreamingScriptText] = useState("");
   const [showScriptEditor, setShowScriptEditor] = useState(false);
@@ -507,13 +1373,10 @@ export default function App() {
     const framesToUse = frames.length > 0 ? frames : pageFrames.slice(0, 4);
     
     const count = framesToUse.length;
+    // To maintain the same aspect ratio as the parent, we want cols == rows.
+    // This ensures (W/cols) / (H/rows) == W/H.
     let cols = Math.ceil(Math.sqrt(count));
-    let rows = Math.ceil(count / cols);
-    if (cols / rows < 1.5 && cols < count) {
-       const altCols = cols + 1;
-       const altRows = Math.ceil(count / altCols);
-       if (altCols * altRows >= count) { cols = altCols; rows = altRows; }
-    }
+    let rows = cols; 
     const gridLayout = `${cols}x${rows}`;
     
     const charNames = page.chars.map(cid => masterChars[cid]?.name || cid).join(', ');
@@ -522,6 +1385,7 @@ export default function App() {
     let composite = `[CONTEXT]: Cinematic storyboard grid (${gridLayout} sequence, ${count} frames). Location: ${locPrompt}. Characters: ${charNames}. Props: ${propNames}.
 [STYLE]: ${GLOBAL_STYLE} ${SUBTITLE_STYLE}.
 [CONTINUITY]: Maintain strict visual continuity with the provided reference images. Lighting, character features, and environment details must match exactly. 
+[LAYOUT]: CRITICAL: Use the provided layout reference image as a spatial guide for composition. Match the framing and object placement exactly.
 [KEYFRAMES]: `;
     let imagePrompt = "";
     let contextPrompt = `Cinematic storyboard grid (${gridLayout} sequence, ${count} frames). Location: ${locPrompt}. Characters: ${charNames}. Props: ${propNames}. `;
@@ -560,7 +1424,7 @@ export default function App() {
     const locPrompt = page.loc.prompt;
     
     // Generate layout on the fly
-    const layoutRef = generateScriptLayout(page.frames || [], "full");
+    const layoutRef = generateScriptLayout(page.frames || [], "full", storyboardAspectRatio);
     
     setResults(prev => ({
       ...prev,
@@ -636,7 +1500,7 @@ export default function App() {
         isFull ? "2K" : "1K", 
         layoutRef, 
         selectedModel,
-        "16:9",
+        storyboardAspectRatio,
         {
           imagePrompt,
           stylePrompt: `${GLOBAL_STYLE} ${SUBTITLE_STYLE}`,
@@ -1122,6 +1986,41 @@ export default function App() {
                 </table>
               </div>
             </section>
+
+            {/* Keyframes Table */}
+            <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+              <h3 className="text-white font-black uppercase tracking-widest italic mb-4">Keyframes Table</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm text-slate-400">
+                  <thead className="text-xs text-slate-500 uppercase bg-slate-950/50">
+                    <tr>
+                      <th className="px-4 py-3 rounded-tl-lg">Beat ID</th>
+                      <th className="px-4 py-3">Frame ID</th>
+                      <th className="px-4 py-3">Priority</th>
+                      <th className="px-4 py-3 rounded-tr-lg">Prompt</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {storyboard.flatMap(page => 
+                      page.frames.map(frame => (
+                        <tr key={`frame-${page.id}-${frame.id}`} className="border-b border-slate-800/50">
+                          <td className="px-4 py-3 font-mono text-xs">{page.id}</td>
+                          <td className="px-4 py-3 font-mono text-xs">{frame.id}</td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                              frame.priority === 'highlight' ? 'bg-amber-500/20 text-amber-500' : 'bg-slate-800 text-slate-500'
+                            }`}>
+                              {frame.priority}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-xs">{frame.prompt}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </div>
         ) : activePanel === "settings" ? (
           <div className="space-y-8">
@@ -1143,6 +2042,49 @@ export default function App() {
                     <Key size={16} />
                     {hasApiKey ? "Update API Key" : "Select API Key"}
                   </button>
+                </div>
+
+                <div className="pt-6 border-t border-slate-800">
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Storyboard Aspect Ratio</label>
+                  <p className="text-sm text-slate-500 mb-4">
+                    Set the aspect ratio for all storyboard generations and their corresponding layout references.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {(["1:1", "3:4", "4:3", "9:16", "16:9"] as const).map((ratio) => (
+                      <button
+                        key={ratio}
+                        onClick={() => setStoryboardAspectRatio(ratio)}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
+                          storyboardAspectRatio === ratio 
+                            ? "bg-sky-500 border-sky-400 text-slate-950" 
+                            : "bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600"
+                        }`}
+                      >
+                        {ratio}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-6 border-t border-slate-800">
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Storyboard Image Prompt Template</label>
+                  <p className="text-sm text-slate-500 mb-4">
+                    The base style and continuity instructions used for all storyboard frame generations.
+                  </p>
+                  <div className="space-y-4">
+                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-4">
+                      <p className="text-[10px] font-black text-sky-500 uppercase tracking-widest mb-2">Global Style</p>
+                      <pre className="text-slate-400 font-mono text-[10px] whitespace-pre-wrap">{GLOBAL_STYLE}</pre>
+                    </div>
+                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-4">
+                      <p className="text-[10px] font-black text-sky-500 uppercase tracking-widest mb-2">Subtitle Style</p>
+                      <pre className="text-slate-400 font-mono text-[10px] whitespace-pre-wrap">{SUBTITLE_STYLE}</pre>
+                    </div>
+                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-4">
+                      <p className="text-[10px] font-black text-sky-500 uppercase tracking-widest mb-2">Continuity Instruction</p>
+                      <pre className="text-slate-400 font-mono text-[10px] whitespace-pre-wrap">CRITICAL: Maintain strict visual continuity with the provided reference images. Lighting, character features, and environment details must match exactly.</pre>
+                    </div>
+                  </div>
                 </div>
               </div>
             </section>
@@ -1229,7 +2171,7 @@ export default function App() {
                               <div 
                                 className="flex items-center gap-1.5 text-[10px] font-bold text-slate-300 bg-slate-800 pr-3 pl-1 py-1 rounded-full border border-slate-700 cursor-pointer hover:border-sky-500/50 transition-colors"
                                 onClick={() => {
-                                  const layoutImg = generateScriptLayout(page.frames || [], "full");
+                                  const layoutImg = generateScriptLayout(page.frames || [], "full", storyboardAspectRatio);
                                   setModalData({
                                     isOpen: true,
                                     imageUrl: layoutImg,
@@ -1241,7 +2183,7 @@ export default function App() {
                                 }}
                               >
                                 <div className="w-6 h-6 rounded-full border border-slate-600 overflow-hidden bg-slate-700 shrink-0">
-                                  <img src={generateScriptLayout(page.frames || [], "full")} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                  <img src={generateScriptLayout(page.frames || [], "full", storyboardAspectRatio)} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                 </div>
                                 <div className="flex items-center gap-1">
                                   <Layout size={10} className="text-slate-400" />
@@ -1326,7 +2268,13 @@ export default function App() {
 
                         {/* Right: Results Track */}
                         <div className="lg:w-3/4">
-                          <div className="bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden aspect-video relative group">
+                          <div className={`bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden relative group ${
+                            storyboardAspectRatio === "16:9" ? "aspect-video" :
+                            storyboardAspectRatio === "9:16" ? "aspect-[9/16]" :
+                            storyboardAspectRatio === "3:4" ? "aspect-[3/4]" :
+                            storyboardAspectRatio === "4:3" ? "aspect-[4/3]" :
+                            "aspect-square"
+                          }`}>
                             {(() => {
                               const currentResult = results[page.id]?.story2K_layout;
                               const stalenessReason = getStalenessReason(page, currentResult);
@@ -1364,7 +2312,7 @@ export default function App() {
                                 <div className="w-full h-full flex flex-col items-center justify-center p-12 text-center relative">
                                   <div className="absolute inset-0 opacity-20 pointer-events-none">
                                     <img 
-                                      src={generateScriptLayout(page.frames || [], "full")} 
+                                      src={generateScriptLayout(page.frames || [], "full", storyboardAspectRatio)} 
                                       className="w-full h-full object-cover grayscale invert"
                                       referrerPolicy="no-referrer"
                                     />

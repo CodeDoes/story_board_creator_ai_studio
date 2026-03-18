@@ -1,20 +1,18 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Tether Production Bible
 
-# Run and deploy your AI Studio app
+A cinematic storyboard generator and production bible tool for the *Tether* series.
 
-This contains everything you need to run your app locally.
+## Features
 
-View your app in AI Studio: https://ai.studio/apps/1344f40e-e7e4-4b78-b13d-3db11bf1a633
+- **Script Ingestion:** Automatically break down raw scripts into logical story beats.
+- **Cinematic Storyboarding:** Generate 16-frame temporal sequences for every beat with strict visual continuity.
+- **Master References:** Maintain consistent visual prompts for characters, locations, and key props.
+- **Production Management:** Organize your production data into sequences and manage visual assets.
 
-## Run Locally
+## Preview
 
-**Prerequisites:**  Node.js
+![Tether Production Bible Screenshot](./Screenshot%202026-03-18%20at%2016-01-24%20Tether%20Production%20Bible%20Google%20AI%20Studio.png)
 
+## License
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+MIT License. See [LICENSE](./LICENSE) for details.

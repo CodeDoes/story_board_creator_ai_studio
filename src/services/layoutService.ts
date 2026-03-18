@@ -1,34 +1,46 @@
 import { StoryFrame } from "../types";
 
-export const generateScriptLayout = (frames: StoryFrame[] = [], type: string): string => {
+export const generateScriptLayout = (frames: StoryFrame[] = [], type: string, aspectRatio: "1:1" | "3:4" | "4:3" | "9:16" | "16:9" = "16:9"): string => {
   const canvas = document.createElement('canvas');
-  canvas.width = 1280;
-  canvas.height = 720;
+  
+  // Set dimensions based on aspect ratio
+  let width = 1280;
+  let height = 720;
+  
+  if (aspectRatio === "1:1") {
+    width = 1024;
+    height = 1024;
+  } else if (aspectRatio === "3:4") {
+    width = 768;
+    height = 1024;
+  } else if (aspectRatio === "4:3") {
+    width = 1024;
+    height = 768;
+  } else if (aspectRatio === "9:16") {
+    width = 720;
+    height = 1280;
+  }
+  
+  canvas.width = width;
+  canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (!ctx) return "";
 
   // Background
   ctx.fillStyle = '#020617'; // slate-950
-  ctx.fillRect(0, 0, 1280, 720);
+  ctx.fillRect(0, 0, width, height);
 
   // Dynamic Grid settings based on frame count
   const safeFrames = frames || [];
   const count = safeFrames.length || 1;
+  
+  // To maintain the same aspect ratio as the parent, we want cols == rows.
+  // This ensures (W/cols) / (H/rows) == W/H.
   let cols = Math.ceil(Math.sqrt(count));
-  let rows = Math.ceil(count / cols);
+  let rows = cols; 
   
-  // Adjust for better aspect ratio (16:9 favors wider grids)
-  if (cols / rows < 1.5 && cols < count) {
-     const altCols = cols + 1;
-     const altRows = Math.ceil(count / altCols);
-     if (altCols * altRows >= count) {
-         cols = altCols;
-         rows = altRows;
-     }
-  }
-  
-  const cellWidth = 1280 / cols;
-  const cellHeight = 720 / rows;
+  const cellWidth = width / cols;
+  const cellHeight = height / rows;
 
   // Draw Grid
   ctx.strokeStyle = '#334155'; // slate-700
