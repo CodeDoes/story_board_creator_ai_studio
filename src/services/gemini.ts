@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { withRetry } from "./apiUtils";
 import { GenerationResult } from "../types";
 
 export const generateProductionAsset = async (
@@ -32,7 +33,7 @@ export const generateProductionAsset = async (
     parts.push({ text: "CRITICAL: Use the provided layout reference as a spatial guide for composition. Match the framing and object placement exactly." });
   }
 
-  const response = await ai.models.generateContent({
+  const response = await withRetry(() => ai.models.generateContent({
     model,
     contents: { parts },
     config: {
@@ -41,7 +42,7 @@ export const generateProductionAsset = async (
         imageSize: size === "512px" ? "512px" : size
       }
     }
-  });
+  }));
 
   let image = "";
   let feedback = "Generation complete.";

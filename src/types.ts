@@ -20,7 +20,6 @@ declare global {
 }
 
 export interface StoryFrame {
-  id: number;
   prompt: string;
   priority: "highlight" | "standard"; // Frame-level priority
 }

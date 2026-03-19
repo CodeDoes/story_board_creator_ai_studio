@@ -5,16 +5,12 @@ interface HeaderProps {
   selectedModel: string;
   setSelectedModel: (model: string) => void;
   clearPersistence: () => void;
-  showScriptEditor: boolean;
-  setShowScriptEditor: (show: boolean) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   selectedModel,
   setSelectedModel,
-  clearPersistence,
-  showScriptEditor,
-  setShowScriptEditor
+  clearPersistence
 }) => {
   return (
     <header className="mb-6 border-b border-slate-800 pb-6 flex flex-col md:flex-row justify-between items-end gap-6">
@@ -41,13 +37,6 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <Trash2 size={14} />
           Clear
-        </button>
-        <button 
-          onClick={() => setShowScriptEditor(!showScriptEditor)}
-          className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-6 py-3 rounded-full font-black text-xs uppercase transition-all border border-slate-700 flex items-center gap-2"
-        >
-          <FileText size={14} />
-          Script Ingest
         </button>
       </div>
     </header>

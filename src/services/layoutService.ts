@@ -3,9 +3,9 @@ import { StoryFrame } from "../types";
 export const generateScriptLayout = (frames: StoryFrame[] = [], type: string, aspectRatio: "1:1" | "3:4" | "4:3" | "9:16" | "16:9" = "16:9"): string => {
   const canvas = document.createElement('canvas');
   
-  // Set dimensions based on aspect ratio
-  let width = 1280;
-  let height = 720;
+  // Set dimensions based on aspect ratio (1K target)
+  let width = 1024;
+  let height = 576; // 16:9
   
   if (aspectRatio === "1:1") {
     width = 1024;
@@ -17,8 +17,8 @@ export const generateScriptLayout = (frames: StoryFrame[] = [], type: string, as
     width = 1024;
     height = 768;
   } else if (aspectRatio === "9:16") {
-    width = 720;
-    height = 1280;
+    width = 576;
+    height = 1024;
   }
   
   canvas.width = width;
@@ -26,60 +26,64 @@ export const generateScriptLayout = (frames: StoryFrame[] = [], type: string, as
   const ctx = canvas.getContext('2d');
   if (!ctx) return "";
 
-  // Background
+  // Background - Deep Matte
   ctx.fillStyle = '#020617'; // slate-950
   ctx.fillRect(0, 0, width, height);
 
-  // Dynamic Grid settings based on frame count
   const safeFrames = frames || [];
-  const count = safeFrames.length || 1;
   
-  // To maintain the same aspect ratio as the parent, we want cols == rows.
-  // This ensures (W/cols) / (H/rows) == W/H.
-  let cols = Math.ceil(Math.sqrt(count));
-  let rows = cols; 
+  // Fixed 3x3 Grid for 9 frames
+  const cols = 3;
+  const rows = 3;
   
-  const cellWidth = width / cols;
-  const cellHeight = height / rows;
-
-  // Draw Grid
-  ctx.strokeStyle = '#334155'; // slate-700
-  ctx.lineWidth = 1;
-
-  for (let i = 0; i < count; i++) {
-    const c = i % cols;
+  const cellW = width / cols;
+  const cellH = height / rows;
+  
+  safeFrames.slice(0, 9).forEach((frame, i) => {
     const r = Math.floor(i / cols);
-    const x = c * cellWidth;
-    const y = r * cellHeight;
+    const c = i % cols;
+    const x = c * cellW;
+    const y = r * cellH;
     
-    // Get prompt
-    const prompt = safeFrames[i]?.prompt || `Frame ${i + 1}`;
-    
-    // Cell background
-    ctx.fillStyle = '#0f172a'; // slate-900
-    ctx.fillRect(x, y, cellWidth, cellHeight);
-    
-    // Cell border
-    ctx.strokeRect(x, y, cellWidth, cellHeight);
-    
-    // Cell label (Prompt)
-    ctx.fillStyle = '#f8fafc'; // slate-50 (brighter text)
-    const fontSize = Math.max(10, Math.min(16, Math.floor(cellHeight / 10)));
-    ctx.font = `bold ${fontSize}px monospace`;
+    const isHighlight = frame.priority === "highlight";
+
+    // Draw Frame
+    // Subtle border
+    ctx.strokeStyle = isHighlight ? 'rgba(14, 165, 233, 0.3)' : 'rgba(30, 41, 59, 0.5)'; // sky-500/30 or slate-800/50
+    ctx.lineWidth = isHighlight ? 2 : 1;
+    ctx.strokeRect(x + 4, y + 4, cellW - 8, cellH - 8);
+
+    // Background for text
+    const gradient = ctx.createLinearGradient(x, y, x + cellW, y + cellH);
+    gradient.addColorStop(0, isHighlight ? '#0f172a' : '#020617');
+    gradient.addColorStop(1, isHighlight ? '#1e293b' : '#0f172a');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(x + 5, y + 5, cellW - 10, cellH - 10);
+
+    // Frame Number - Large Editorial Style
+    ctx.fillStyle = isHighlight ? 'rgba(14, 165, 233, 0.05)' : 'rgba(255, 255, 255, 0.02)';
+    const numSize = Math.floor(cellH * 0.7);
+    ctx.font = `900 ${numSize}px "Inter", sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    
-    // Simple text wrapping
-    const words = prompt.split(' ');
+    ctx.fillText(`${i + 1}`, x + cellW / 2, y + cellH / 2);
+
+    // Prompt Text
+    ctx.fillStyle = isHighlight ? '#f8fafc' : '#94a3b8'; // slate-50 or slate-400
+    const fontSize = isHighlight ? 14 : 10;
+    ctx.font = `${isHighlight ? 'bold' : 'normal'} ${fontSize}px "JetBrains Mono", monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const words = (frame.prompt || "").split(' ');
     let line = '';
     const lines = [];
-    const maxWidth = cellWidth - 20;
+    const maxWidth = cellW - 40;
     
     for (let n = 0; n < words.length; n++) {
       const testLine = line + words[n] + ' ';
       const metrics = ctx.measureText(testLine);
-      const testWidth = metrics.width;
-      if (testWidth > maxWidth && n > 0) {
+      if (metrics.width > maxWidth && n > 0) {
         lines.push(line);
         line = words[n] + ' ';
       } else {
@@ -87,20 +91,29 @@ export const generateScriptLayout = (frames: StoryFrame[] = [], type: string, as
       }
     }
     lines.push(line);
-    
-    const lineHeight = fontSize + 4;
-    const startY = y + (cellHeight / 2) - ((lines.length - 1) * lineHeight / 2);
-    
+
+    const lineHeight = fontSize * 1.4;
+    const totalTextHeight = lines.length * lineHeight;
+    const startY = y + (cellH / 2) - (totalTextHeight / 2) + (lineHeight / 2);
+
     lines.forEach((l, idx) => {
-      ctx.fillText(l.trim(), x + cellWidth/2, startY + (idx * lineHeight));
+      ctx.fillText(l.trim(), x + cellW / 2, startY + (idx * lineHeight));
     });
 
-    // Frame Number (Small, top-left)
-    ctx.fillStyle = '#334155';
-    ctx.font = '8px monospace';
+    // Small index in corner
+    ctx.fillStyle = isHighlight ? '#38bdf8' : '#475569'; // sky-400 or slate-500
+    ctx.font = 'bold 10px "JetBrains Mono", monospace';
     ctx.textAlign = 'left';
-    ctx.fillText(`${i + 1}`, x + 5, y + 10);
-  }
+    ctx.textBaseline = 'top';
+    ctx.fillText(`${i + 1}`, x + 15, y + 15);
+
+    if (isHighlight) {
+      ctx.fillStyle = 'rgba(14, 165, 233, 0.1)';
+      ctx.font = 'black 6px "Inter", sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText('HIGHLIGHT BEAT', x + cellW - 15, y + 15);
+    }
+  });
 
   return canvas.toDataURL('image/png');
 };

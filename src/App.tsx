@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { get, set, clear } from 'idb-keyval';
 import { GoogleGenAI } from "@google/genai";
+import { withRetry } from './services/apiUtils';
 import { generateProductionAsset } from './services/gemini';
 import { generateScriptLayout } from './services/layoutService';
 import { PageData, Panel, Character, Prop, GenerationResult, ActivePanel, GenerationMode } from './types';
@@ -20,7 +21,6 @@ import { ReferenceCard } from './components/ReferenceCard';
 import { ImageModal } from './components/ImageModal';
 
 import { Header } from './components/Header';
-import { ScriptIngest } from './components/ScriptIngest';
 import { Navigation } from './components/Navigation';
 import { ReferencesPanel } from './components/ReferencesPanel';
 import { DataPanel } from './components/DataPanel';
@@ -28,7 +28,130 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { SequencesPanel } from './components/SequencesPanel';
 import { Footer } from './components/Footer';
 
+// --- KEY SELECTION GUARD ---
+
+const KeySelectionGuard = ({ children }: { children: React.ReactNode }) => {
+  const [hasKey, setHasKey] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const checkKey = async () => {
+      if (window.aistudio?.hasSelectedApiKey) {
+        const selected = await window.aistudio.hasSelectedApiKey();
+        setHasKey(selected);
+      } else {
+        // Fallback or development environment
+        setHasKey(true);
+      }
+    };
+    checkKey();
+  }, []);
+
+  const handleOpenKeySelector = async () => {
+    if (window.aistudio?.openSelectKey) {
+      await window.aistudio.openSelectKey();
+      // Assume success and proceed as per guidelines
+      setHasKey(true);
+    }
+  };
+
+  if (hasKey === null) return null;
+
+  if (!hasKey) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center shadow-2xl">
+          <div className="w-16 h-16 bg-indigo-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Key className="w-8 h-8 text-indigo-400" />
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-4">Connect Gemini API</h1>
+          <p className="text-slate-400 mb-8 leading-relaxed">
+            To generate high-quality storyboard assets and process scripts, you'll need to connect your own Gemini API key.
+          </p>
+          <button
+            onClick={handleOpenKeySelector}
+            className="w-full py-4 px-6 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl transition-all shadow-lg shadow-indigo-500/20 active:scale-[0.98]"
+          >
+            Select API Key
+          </button>
+          <p className="mt-6 text-xs text-slate-500">
+            Don't have a key? Visit the <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline">Gemini API Billing Docs</a> to set one up.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+};
+
 // --- CONSTANTS ---
+
+// Simple JSON repair for truncated LLM output
+const repairJSON = (json: string): string => {
+  let cleaned = json.trim();
+  
+  // Find first { and last }
+  const firstBrace = cleaned.indexOf('{');
+  if (firstBrace === -1) return "{}";
+  cleaned = cleaned.substring(firstBrace);
+  
+  // Basic stack-based repair for truncation
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  let lastSignificantChar = '';
+
+  for (let i = 0; i < cleaned.length; i++) {
+    const char = cleaned[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      if (!inString) lastSignificantChar = '"';
+      continue;
+    }
+    if (inString) continue;
+
+    if (char.trim()) {
+      lastSignificantChar = char;
+    }
+
+    if (char === '{' || char === '[') {
+      stack.push(char);
+    } else if (char === '}') {
+      if (stack[stack.length - 1] === '{') stack.pop();
+    } else if (char === ']') {
+      if (stack[stack.length - 1] === '[') stack.pop();
+    }
+  }
+
+  // If we are in a string, close it
+  if (inString) {
+    cleaned += '"';
+    lastSignificantChar = '"';
+  }
+
+  // If the last character is a comma or colon, remove it
+  if (lastSignificantChar === ',' || lastSignificantChar === ':') {
+    const lastIndex = cleaned.lastIndexOf(lastSignificantChar);
+    cleaned = cleaned.substring(0, lastIndex);
+  }
+
+  // Close open structures in reverse order
+  while (stack.length > 0) {
+    const last = stack.pop();
+    if (last === '{') cleaned += '}';
+    else if (last === '[') cleaned += ']';
+  }
+
+  return cleaned;
+};
 
 export default function App() {
   const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
@@ -38,15 +161,17 @@ export default function App() {
   const [rawScript, setRawScript] = useState("");
 
   const [isProcessingScript, setIsProcessingScript] = useState(false);
+  const abortControllerRef = React.useRef<AbortController | null>(null);
   const [scriptStartTime, setScriptStartTime] = useState<number | null>(null);
-  const [activePanel, setActivePanel] = useState<"references" | "sequences" | "data" | "settings">("sequences");
+  const [scriptFirstTokenTime, setScriptFirstTokenTime] = useState<number | null>(null);
+  const [scriptEndTime, setScriptEndTime] = useState<number | null>(null);
+  const [activePanel, setActivePanel] = useState<"references" | "sequences" | "data" | "settings">("data");
   const [masterChars, setMasterChars] = useState<Record<string, Character>>({});
   const [masterProps, setMasterProps] = useState<Record<string, Prop>>({});
   const [sharedProps, setSharedProps] = useState<Record<string, { result: GenerationResult | null; loading: boolean; startTime?: number }>>({});
   const [activeTabs, setActiveTabs] = useState<Record<number, GenerationMode>>({});
   const [scriptText, setScriptText] = useState("");
   const [streamingScriptText, setStreamingScriptText] = useState("");
-  const [showScriptEditor, setShowScriptEditor] = useState(false);
 
   const [modalData, setModalData] = useState<{
     isOpen: boolean;
@@ -79,6 +204,13 @@ export default function App() {
 
   useEffect(() => {
     const checkApiKey = async () => {
+      // Check if a key is already present in the environment (Secrets)
+      const envKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+      if (envKey) {
+        setHasApiKey(true);
+        return;
+      }
+
       if (window.aistudio && window.aistudio.hasSelectedApiKey) {
         const hasKey = await window.aistudio.hasSelectedApiKey();
         setHasApiKey(hasKey);
@@ -110,13 +242,17 @@ export default function App() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [locs, chars, props, savedResults, savedStoryboard, savedSummaries] = await Promise.all([
+        const [locs, chars, props, savedResults, savedStoryboard, savedSummaries, savedMasterChars, savedMasterProps, savedRawScript, savedScriptText] = await Promise.all([
           get('tether_locs'),
           get('tether_chars'),
           get('tether_props'),
           get('tether_results'),
           get('tether_storyboard'),
-          get('tether_summaries')
+          get('tether_summaries'),
+          get('tether_master_chars'),
+          get('tether_master_props'),
+          get('tether_raw_script'),
+          get('tether_script_text')
         ]);
         
         if (locs) {
@@ -136,6 +272,10 @@ export default function App() {
         }
         if (savedStoryboard) setStoryboard(savedStoryboard);
         if (savedSummaries) setSequenceSummaries(savedSummaries);
+        if (savedMasterChars) setMasterChars(savedMasterChars);
+        if (savedMasterProps) setMasterProps(savedMasterProps);
+        if (savedRawScript) setRawScript(savedRawScript);
+        if (savedScriptText) setScriptText(savedScriptText);
         
         const initialResults: any = {};
         
@@ -181,6 +321,10 @@ export default function App() {
       set('tether_props', cleanProps);
       set('tether_storyboard', storyboard);
       set('tether_summaries', sequenceSummaries);
+      set('tether_master_chars', masterChars);
+      set('tether_master_props', masterProps);
+      set('tether_raw_script', rawScript);
+      set('tether_script_text', scriptText);
       
       const resultsToSave = { ...results };
       Object.keys(resultsToSave).forEach(key => {
@@ -188,7 +332,7 @@ export default function App() {
       });
       set('tether_results', resultsToSave);
     }
-  }, [sharedLocs, sharedChars, sharedProps, storyboard, sequenceSummaries, results, isLoaded]);
+  }, [sharedLocs, sharedChars, sharedProps, storyboard, sequenceSummaries, masterChars, masterProps, rawScript, results, isLoaded]);
 
   const clearPersistence = async () => {
     await clear();
@@ -200,14 +344,21 @@ export default function App() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleScriptOverride = () => {
+  const handleScriptOverride = (text: string) => {
     try {
-      const parsed = JSON.parse(scriptText);
-      setStoryboard(parsed);
-      setShowScriptEditor(false);
-      showToast("Script Updated Successfully");
+      const data = JSON.parse(text);
+      if (Array.isArray(data)) {
+        setStoryboard(data);
+      } else {
+        if (data.masterChars) setMasterChars(data.masterChars);
+        if (data.masterProps) setMasterProps(data.masterProps);
+        if (data.sequenceSummaries) setSequenceSummaries(data.sequenceSummaries);
+        if (data.storyboard) setStoryboard(data.storyboard);
+      }
+      setScriptText(text);
+      showToast("Production Bible Updated Successfully");
     } catch (e) {
-      alert("Invalid JSON script format");
+      alert("Invalid JSON format. Please ensure it matches the Production Bible schema.");
     }
   };
 
@@ -287,7 +438,14 @@ export default function App() {
     if (!rawScript.trim()) return;
     setIsProcessingScript(true);
     setScriptStartTime(Date.now());
+    setScriptFirstTokenTime(null);
+    setScriptEndTime(null);
     setStreamingScriptText("");
+    setResults({}); // Clear results for fresh ingest
+    
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.API_KEY });
       const currentContext = {
@@ -301,37 +459,80 @@ export default function App() {
         .replace("{{CURRENT_CONTEXT}}", JSON.stringify(currentContext, null, 2))
         .replace("{{RAW_SCRIPT}}", rawScript);
 
-      const response = await ai.models.generateContentStream({
-        model: "gemini-3.1-pro-preview",
+      const response = await withRetry(() => ai.models.generateContentStream({
+        model: "gemini-3-flash-preview",
         contents: prompt,
         config: {
-          responseMimeType: "application/json"
+          responseMimeType: "application/json",
+          temperature: 0.1, // Lower temperature for more consistent JSON
         }
-      });
+      }));
 
       let fullText = "";
       for await (const chunk of response) {
-        fullText += chunk.text;
+        if (controller.signal.aborted) break;
+        const text = chunk.text;
+        if (!fullText && text) {
+          setScriptFirstTokenTime(Date.now());
+        }
+        fullText += text;
         setStreamingScriptText(fullText);
       }
 
-      const data = JSON.parse(fullText || "{}");
-      if (data.masterChars) setMasterChars(data.masterChars);
-      if (data.masterProps) setMasterProps(data.masterProps);
-      if (data.sequenceSummaries) setSequenceSummaries(data.sequenceSummaries);
+      if (controller.signal.aborted) return;
+
+      setScriptEndTime(Date.now());
+
+      let data;
+      try {
+        // Attempt to parse directly
+        data = JSON.parse(fullText || "{}");
+      } catch (err) {
+        console.warn("Direct JSON parse failed, attempting recovery...", err);
+        try {
+          const repaired = repairJSON(fullText);
+          data = JSON.parse(repaired);
+          console.log("JSON Recovery Successful via repairJSON");
+        } catch (err2) {
+          console.error("Recovery parse failed", err2);
+          throw new Error(`JSON Parse Error: ${err instanceof Error ? err.message : String(err)}\n\nPartial Output: ${fullText.substring(0, 300)}...`);
+        }
+      }
+
+      // Merge logic: Update existing or add new
+      if (data.masterChars) {
+        setMasterChars(prev => ({ ...prev, ...data.masterChars }));
+      }
+      if (data.masterProps) {
+        setMasterProps(prev => ({ ...prev, ...data.masterProps }));
+      }
+      if (data.sequenceSummaries) {
+        setSequenceSummaries(prev => ({ ...prev, ...data.sequenceSummaries }));
+      }
       if (data.storyboard) {
+        // For storyboard, we usually want to append or replace specific pages
+        // but for now, let's keep the AI's version as the "merged" result
+        // if it followed the prompt to include existing context.
+        // If we want true incremental, we'd need more complex logic.
+        // Let's stick to the AI's full output for now but support the repair.
         setStoryboard(data.storyboard);
         setScriptText(JSON.stringify(data, null, 2));
       }
       showToast("Script Merged Successfully.");
-      setShowScriptEditor(false);
     } catch (err) {
       console.error("Script Processing Error:", err);
       showToast("Failed to process script.");
     } finally {
       setIsProcessingScript(false);
-      setScriptStartTime(null);
-      setStreamingScriptText("");
+    }
+  };
+
+  const cancelScriptProcess = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setIsProcessingScript(false);
+      showToast("Script processing cancelled.");
     }
   };
 
@@ -387,10 +588,9 @@ export default function App() {
     const framesToUse = frames.length > 0 ? frames : pageFrames.slice(0, 4);
     
     const count = framesToUse.length;
-    // To maintain the same aspect ratio as the parent, we want cols == rows.
-    // This ensures (W/cols) / (H/rows) == W/H.
-    let cols = Math.ceil(Math.sqrt(count));
-    let rows = cols; 
+    // Fixed 3x3 grid for 9 frames as per user request
+    const cols = 3;
+    const rows = 3;
     const gridLayout = `${cols}x${rows}`;
     
     const charNames = page.chars.map(cid => masterChars[cid]?.name || cid).join(', ');
@@ -511,7 +711,7 @@ export default function App() {
       const resStory = await generateProductionAsset(
         composite, 
         referenceImages, 
-        isFull ? "2K" : "1K", 
+        "1K", 
         layoutRef, 
         selectedModel,
         storyboardAspectRatio,
@@ -603,28 +803,12 @@ export default function App() {
         selectedModel={selectedModel}
         setSelectedModel={setSelectedModel}
         clearPersistence={clearPersistence}
-        showScriptEditor={showScriptEditor}
-        setShowScriptEditor={setShowScriptEditor}
       />
 
-      {showScriptEditor || storyboard.length === 0 ? (
-        <ScriptIngest 
-          rawScript={rawScript}
-          setRawScript={setRawScript}
-          isProcessingScript={isProcessingScript}
-          scriptStartTime={scriptStartTime}
-          currentTime={currentTime}
-          processScript={processScript}
-          showCancel={storyboard.length > 0}
-          onCancel={() => setShowScriptEditor(false)}
-          streamingScriptText={streamingScriptText}
-        />
-      ) : (
-        <>
-          <Navigation 
-            activePanel={activePanel}
-            setActivePanel={setActivePanel}
-          />
+      <Navigation 
+        activePanel={activePanel}
+        setActivePanel={setActivePanel}
+      />
 
       <main className="space-y-8">
         {activePanel === "references" ? (
@@ -647,13 +831,19 @@ export default function App() {
             setRawScript={setRawScript}
             isProcessingScript={isProcessingScript}
             scriptStartTime={scriptStartTime}
+            scriptFirstTokenTime={scriptFirstTokenTime}
+            scriptEndTime={scriptEndTime}
             currentTime={currentTime}
             processScript={processScript}
+            cancelScriptProcess={cancelScriptProcess}
             streamingScriptText={streamingScriptText}
             masterChars={masterChars}
             masterProps={masterProps}
             storyboard={storyboard}
             sequenceSummaries={sequenceSummaries}
+            scriptText={scriptText}
+            setScriptText={setScriptText}
+            handleScriptOverride={handleScriptOverride}
             sharedChars={sharedChars}
             sharedProps={sharedProps}
             sharedLocs={sharedLocs}
@@ -687,10 +877,8 @@ export default function App() {
           />
         )}
       </main>
-    </>
-  )}
 
-  <AnimatePresence>
+      <AnimatePresence>
     {toast && <Toast message={toast} onHide={() => setToast(null)} />}
   </AnimatePresence>
 
