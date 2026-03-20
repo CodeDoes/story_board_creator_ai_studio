@@ -37,4 +37,7 @@ Return a COMPLETE NEW JSON object with:
      frames: Array<{ prompt: string, priority: "highlight" | "standard" }> // EXACTLY 9 frames per page.
    }>
 
-CRITICAL: The output MUST be valid JSON. NO preamble, NO postamble, NO markdown code blocks. Just the raw JSON object. Ensure all strings are correctly escaped and all objects are properly closed.`;
+CRITICAL: The output MUST be valid JSON. NO preamble, NO postamble, NO markdown code blocks. Just the raw JSON object.
+Ensure all strings are correctly escaped and all objects are properly closed.
+IMPORTANT: Pay close attention to commas between properties and elements. Do not forget them.
+If the script is very long, you may simplify the frame descriptions to stay within token limits, but you MUST maintain the 9-frame structure per page.`;

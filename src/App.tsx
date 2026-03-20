@@ -5,12 +5,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Key
-} from 'lucide-react';
 import { get, set, clear } from 'idb-keyval';
+import { getApiKey } from './services/auth';
 import { GoogleGenAI } from "@google/genai";
-import { withRetry } from './services/apiUtils';
+import { withRetry, withTimeout, streamWithTimeout } from './services/apiUtils';
 import { generateProductionAsset } from './services/gemini';
 import { generateScriptLayout } from './services/layoutService';
 import { PageData, Panel, Character, Prop, GenerationResult, ActivePanel, GenerationMode } from './types';
@@ -28,133 +26,115 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { SequencesPanel } from './components/SequencesPanel';
 import { Footer } from './components/Footer';
 
-// --- KEY SELECTION GUARD ---
-
-const KeySelectionGuard = ({ children }: { children: React.ReactNode }) => {
-  const [hasKey, setHasKey] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    const checkKey = async () => {
-      if (window.aistudio?.hasSelectedApiKey) {
-        const selected = await window.aistudio.hasSelectedApiKey();
-        setHasKey(selected);
-      } else {
-        // Fallback or development environment
-        setHasKey(true);
-      }
-    };
-    checkKey();
-  }, []);
-
-  const handleOpenKeySelector = async () => {
-    if (window.aistudio?.openSelectKey) {
-      await window.aistudio.openSelectKey();
-      // Assume success and proceed as per guidelines
-      setHasKey(true);
-    }
-  };
-
-  if (hasKey === null) return null;
-
-  if (!hasKey) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center shadow-2xl">
-          <div className="w-16 h-16 bg-indigo-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Key className="w-8 h-8 text-indigo-400" />
-          </div>
-          <h1 className="text-2xl font-bold text-white mb-4">Connect Gemini API</h1>
-          <p className="text-slate-400 mb-8 leading-relaxed">
-            To generate high-quality storyboard assets and process scripts, you'll need to connect your own Gemini API key.
-          </p>
-          <button
-            onClick={handleOpenKeySelector}
-            className="w-full py-4 px-6 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl transition-all shadow-lg shadow-indigo-500/20 active:scale-[0.98]"
-          >
-            Select API Key
-          </button>
-          <p className="mt-6 text-xs text-slate-500">
-            Don't have a key? Visit the <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:underline">Gemini API Billing Docs</a> to set one up.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  return <>{children}</>;
-};
-
 // --- CONSTANTS ---
 
-// Simple JSON repair for truncated LLM output
+// Robust JSON repair for truncated or slightly malformed LLM output
 const repairJSON = (json: string): string => {
   let cleaned = json.trim();
   
-  // Find first { and last }
+  // 1. Remove markdown code blocks if present
+  cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/```$/, "").trim();
+
+  // 2. Find first { - ignore everything before it
   const firstBrace = cleaned.indexOf('{');
   if (firstBrace === -1) return "{}";
   cleaned = cleaned.substring(firstBrace);
   
-  // Basic stack-based repair for truncation
+  // 3. Remove comments (JSON doesn't support them but LLMs sometimes add them)
+  cleaned = cleaned.replace(/\/\/.*$/gm, "");
+  cleaned = cleaned.replace(/\/\*[\s\S]*?\*\//g, "");
+
+  // 4. Track stack and find end or truncation point
   const stack: string[] = [];
   let inString = false;
   let escaped = false;
   let lastSignificantChar = '';
+  let jsonEndIndex = -1;
+  let repaired = "";
 
   for (let i = 0; i < cleaned.length; i++) {
     const char = cleaned[i];
+    
     if (escaped) {
       escaped = false;
+      repaired += char;
       continue;
     }
+    
     if (char === '\\') {
       escaped = true;
+      repaired += char;
       continue;
     }
+    
     if (char === '"') {
       inString = !inString;
+      repaired += char;
       if (!inString) lastSignificantChar = '"';
       continue;
     }
-    if (inString) continue;
+    
+    if (inString) {
+      repaired += char;
+      continue;
+    }
 
     if (char.trim()) {
       lastSignificantChar = char;
     }
 
+    repaired += char;
+
     if (char === '{' || char === '[') {
       stack.push(char);
     } else if (char === '}') {
       if (stack[stack.length - 1] === '{') stack.pop();
+      if (stack.length === 0) {
+        jsonEndIndex = repaired.length;
+        break; 
+      }
     } else if (char === ']') {
       if (stack[stack.length - 1] === '[') stack.pop();
+      if (stack.length === 0) {
+        jsonEndIndex = repaired.length;
+        break;
+      }
     }
   }
 
-  // If we are in a string, close it
-  if (inString) {
-    cleaned += '"';
-    lastSignificantChar = '"';
+  if (jsonEndIndex !== -1) {
+    cleaned = repaired.substring(0, jsonEndIndex);
+  } else {
+    // Truncated JSON recovery
+    cleaned = repaired;
+    if (inString) {
+      cleaned += '"';
+      lastSignificantChar = '"';
+    }
+    
+    // Remove trailing comma or colon which are invalid before a closing brace
+    cleaned = cleaned.trim().replace(/[,:]$/, "");
+
+    // Close open structures in reverse order
+    const tempStack = [...stack];
+    while (tempStack.length > 0) {
+      const last = tempStack.pop();
+      if (last === '{') cleaned += '}';
+      else if (last === '[') cleaned += ']';
+    }
   }
 
-  // If the last character is a comma or colon, remove it
-  if (lastSignificantChar === ',' || lastSignificantChar === ':') {
-    const lastIndex = cleaned.lastIndexOf(lastSignificantChar);
-    cleaned = cleaned.substring(0, lastIndex);
-  }
-
-  // Close open structures in reverse order
-  while (stack.length > 0) {
-    const last = stack.pop();
-    if (last === '{') cleaned += '}';
-    else if (last === '[') cleaned += ']';
-  }
+  // 5. Final pass: fix missing commas between properties/elements
+  // This handles cases like "value" "key": or 123 "key":
+  cleaned = cleaned.replace(/("|\d|true|false|null)\s*\n?\s*"/g, '$1, "');
+  
+  // 6. Fix trailing commas before closing braces/brackets
+  cleaned = cleaned.replace(/,\s*([}\]])/g, '$1');
 
   return cleaned;
 };
 
 export default function App() {
-  const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
   const [storyboard, setStoryboard] = useState<PageData[]>(DEFAULT_STORYBOARD);
   const [storyboardAspectRatio, setStoryboardAspectRatio] = useState<"1:1" | "3:4" | "4:3" | "9:16" | "16:9">("16:9");
   const [sequenceSummaries, setSequenceSummaries] = useState<Record<string, string>>({});
@@ -202,34 +182,6 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    const checkApiKey = async () => {
-      // Check if a key is already present in the environment (Secrets)
-      const envKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
-      if (envKey) {
-        setHasApiKey(true);
-        return;
-      }
-
-      if (window.aistudio && window.aistudio.hasSelectedApiKey) {
-        const hasKey = await window.aistudio.hasSelectedApiKey();
-        setHasApiKey(hasKey);
-      } else {
-        // Fallback for local development or if not in AI Studio
-        setHasApiKey(true);
-      }
-    };
-    checkApiKey();
-  }, []);
-
-  const handleSelectKey = async () => {
-    if (window.aistudio && window.aistudio.openSelectKey) {
-      await window.aistudio.openSelectKey();
-      // Assume success to mitigate race condition
-      setHasApiKey(true);
-    }
-  };
-
   // Shared references across sequences with persistence
   const [sharedLocs, setSharedLocs] = useState<Record<string, { result: GenerationResult | null; loading: boolean; startTime?: number }>>({});
   const [sharedChars, setSharedChars] = useState<Record<string, { result: GenerationResult | null; loading: boolean; startTime?: number }>>({});
@@ -237,6 +189,23 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>('gemini-3.1-flash-image-preview');
+  const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
+
+  // Check for API key on mount
+  useEffect(() => {
+    const checkKey = async () => {
+      // @ts-ignore
+      if (window.aistudio && window.aistudio.hasSelectedApiKey) {
+        // @ts-ignore
+        const hasKey = await window.aistudio.hasSelectedApiKey();
+        setHasApiKey(hasKey);
+      } else {
+        // Fallback for local dev or if platform API is missing
+        setHasApiKey(!!getApiKey());
+      }
+    };
+    checkKey();
+  }, []);
 
   // Persistence Load (Async IndexedDB)
   useEffect(() => {
@@ -391,8 +360,16 @@ export default function App() {
       return res;
     } catch (err: any) {
       setSharedLocs(prev => ({ ...prev, [locPrompt]: { result: prev[locPrompt]?.result || null, loading: false } }));
-      const isOverloaded = JSON.stringify(err).includes("503") || JSON.stringify(err).includes("500");
-      showToast(isOverloaded ? "Engine Overloaded. Try switching models." : "Location Generation Failed.");
+      const errStr = JSON.stringify(err);
+      const isOverloaded = errStr.includes("503") || errStr.includes("500");
+      const isKeyError = errStr.includes("403") || errStr.includes("PERMISSION_DENIED") || errStr.includes("Requested entity was not found");
+      
+      if (isKeyError) {
+        setHasApiKey(false);
+        showToast("API Key Error. Please re-select your key.");
+      } else {
+        showToast(isOverloaded ? "Engine Overloaded. Try switching models." : "Location Generation Failed.");
+      }
       throw err;
     }
   };
@@ -428,8 +405,16 @@ export default function App() {
       return res;
     } catch (err: any) {
       setSharedChars(prev => ({ ...prev, [charId]: { result: prev[charId]?.result || null, loading: false } }));
-      const isOverloaded = JSON.stringify(err).includes("503") || JSON.stringify(err).includes("500");
-      showToast(isOverloaded ? "Engine Overloaded. Try switching models." : "Character Generation Failed.");
+      const errStr = JSON.stringify(err);
+      const isOverloaded = errStr.includes("503") || errStr.includes("500");
+      const isKeyError = errStr.includes("403") || errStr.includes("PERMISSION_DENIED") || errStr.includes("Requested entity was not found");
+      
+      if (isKeyError) {
+        setHasApiKey(false);
+        showToast("API Key Error. Please re-select your key.");
+      } else {
+        showToast(isOverloaded ? "Engine Overloaded. Try switching models." : "Character Generation Failed.");
+      }
       throw err;
     }
   };
@@ -447,7 +432,9 @@ export default function App() {
     abortControllerRef.current = controller;
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.API_KEY });
+      const apiKey = getApiKey();
+      if (!apiKey) throw new Error("API key not found.");
+      const ai = new GoogleGenAI({ apiKey });
       const currentContext = {
         masterChars,
         masterProps,
@@ -459,17 +446,23 @@ export default function App() {
         .replace("{{CURRENT_CONTEXT}}", JSON.stringify(currentContext, null, 2))
         .replace("{{RAW_SCRIPT}}", rawScript);
 
-      const response = await withRetry(() => ai.models.generateContentStream({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          temperature: 0.1, // Lower temperature for more consistent JSON
-        }
-      }));
+      const response = await withTimeout(
+        withRetry(() => ai.models.generateContentStream({
+          model: "gemini-3-flash-preview",
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            temperature: 0.1, // Lower temperature for more consistent JSON
+          }
+        }), 5, 2000),
+        20000,
+        "Initial connection timed out: No response from model for 20 seconds."
+      );
 
       let fullText = "";
-      for await (const chunk of response) {
+      const WATCHDOG_TIMEOUT = 20000; // 20 seconds as requested
+
+      for await (const chunk of streamWithTimeout(response, WATCHDOG_TIMEOUT, "Ingest timed out: No response from model for 20 seconds.")) {
         if (controller.signal.aborted) break;
         const text = chunk.text;
         if (!fullText && text) {
@@ -495,7 +488,9 @@ export default function App() {
           console.log("JSON Recovery Successful via repairJSON");
         } catch (err2) {
           console.error("Recovery parse failed", err2);
-          throw new Error(`JSON Parse Error: ${err instanceof Error ? err.message : String(err)}\n\nPartial Output: ${fullText.substring(0, 300)}...`);
+          const start = fullText.substring(0, 500);
+          const end = fullText.length > 500 ? fullText.substring(fullText.length - 500) : "";
+          throw new Error(`JSON Parse Error: ${err instanceof Error ? err.message : String(err)}\n\nStart of Output: ${start}\n\n... [TRUNCATED] ...\n\nEnd of Output: ${end}`);
         }
       }
 
@@ -519,9 +514,18 @@ export default function App() {
         setScriptText(JSON.stringify(data, null, 2));
       }
       showToast("Script Merged Successfully.");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Script Processing Error:", err);
-      showToast("Failed to process script.");
+      const errStr = JSON.stringify(err);
+      const isKeyError = errStr.includes("403") || errStr.includes("PERMISSION_DENIED") || errStr.includes("Requested entity was not found");
+      
+      if (isKeyError) {
+        setHasApiKey(false);
+        showToast("API Key Error. Please re-select your key.");
+      } else {
+        const errorMsg = err.message || "Unknown error";
+        showToast(`Failed to process script: ${errorMsg}`);
+      }
     } finally {
       setIsProcessingScript(false);
     }
@@ -557,9 +561,17 @@ export default function App() {
       );
       setSharedProps(prev => ({ ...prev, [propId]: { result, loading: false } }));
       showToast(`Prop ${prop.name} generated!`);
-    } catch (err) {
+    } catch (err: any) {
       setSharedProps(prev => ({ ...prev, [propId]: { result: prev[propId]?.result || null, loading: false } }));
-      showToast("Prop generation failed.");
+      const errStr = JSON.stringify(err);
+      const isKeyError = errStr.includes("403") || errStr.includes("PERMISSION_DENIED") || errStr.includes("Requested entity was not found");
+      
+      if (isKeyError) {
+        setHasApiKey(false);
+        showToast("API Key Error. Please re-select your key.");
+      } else {
+        showToast("Prop generation failed.");
+      }
     }
   };
 
@@ -754,10 +766,16 @@ export default function App() {
       const errStr = JSON.stringify(err);
       const is503 = errStr.includes("503");
       const is500 = errStr.includes("500");
+      const is403 = errStr.includes("403") || errStr.includes("PERMISSION_DENIED");
+      const isNotFound = errStr.includes("Requested entity was not found");
       
       let statusMsg = "❌ PIPELINE FAILED.";
       if (is503) statusMsg = "❌ MODEL OVERLOADED (503). Try Nano Banana (2.5).";
       if (is500) statusMsg = "❌ INTERNAL ENGINE ERROR (500). Try again or switch models.";
+      if (is403 || isNotFound) {
+        statusMsg = "❌ API KEY ERROR. Please re-select your key.";
+        setHasApiKey(false);
+      }
       
       setResults(prev => ({
         ...prev,
@@ -766,36 +784,11 @@ export default function App() {
       
       if (is503 || is500) {
         showToast(is503 ? "Gemini 3.1 is busy (503)." : "Internal Engine Error (500).");
+      } else if (is403 || isNotFound) {
+        showToast("API Key Permission Error. Please re-select your key.");
       }
     }
   };
-
-  if (hasApiKey === false) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-slate-300 font-sans p-8 flex items-center justify-center">
-        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center space-y-6">
-          <div className="w-16 h-16 bg-sky-500/10 rounded-full flex items-center justify-center mx-auto border border-sky-500/30">
-            <Key className="text-sky-400" size={32} />
-          </div>
-          <div>
-            <h2 className="text-xl font-black text-white tracking-tight mb-2">API Key Required</h2>
-            <p className="text-sm text-slate-400">
-              This application uses advanced Gemini models that require a user-provided API key from a paid Google Cloud project.
-            </p>
-          </div>
-          <button
-            onClick={handleSelectKey}
-            className="w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2"
-          >
-            Select API Key
-          </button>
-          <p className="text-xs text-slate-500">
-            Learn more about <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noreferrer" className="text-sky-400 hover:underline">billing and API keys</a>.
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen p-4 md:p-6 max-w-7xl mx-auto">
@@ -852,10 +845,10 @@ export default function App() {
           />
         ) : activePanel === "settings" ? (
           <SettingsPanel 
-            handleSelectKey={handleSelectKey}
-            hasApiKey={hasApiKey}
             storyboardAspectRatio={storyboardAspectRatio}
             setStoryboardAspectRatio={setStoryboardAspectRatio}
+            hasApiKey={hasApiKey}
+            onKeyUpdate={() => setHasApiKey(true)}
           />
         ) : (
           <SequencesPanel 

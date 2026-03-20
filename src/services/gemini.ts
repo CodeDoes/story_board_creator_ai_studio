@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { withRetry } from "./apiUtils";
 import { GenerationResult } from "../types";
+import { getApiKey } from "./auth";
 
 export const generateProductionAsset = async (
   prompt: string, 
@@ -11,7 +12,9 @@ export const generateProductionAsset = async (
   aspectRatio: "1:1" | "3:4" | "4:3" | "9:16" | "16:9" = "16:9",
   promptParts?: { imagePrompt?: string; stylePrompt?: string; contextPrompt?: string }
 ): Promise<GenerationResult> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.API_KEY! });
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error("API key not found. Please set your Gemini API key.");
+  const ai = new GoogleGenAI({ apiKey });
   
   const parts: any[] = [{ text: prompt }];
   referenceImages.forEach(img => {
